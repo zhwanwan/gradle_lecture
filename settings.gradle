@@ -1,0 +1,5 @@
+rootProject.name = 'gradle_lecture'
+include 'ToDoApp'
+include 'Task04'
+findProject(':Task04')?.name = 'task04'
+

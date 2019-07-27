@@ -1,0 +1,158 @@
+/**
+ * java命令运行主方法，-cp选项指定classpath告诉java去哪里找class
+ * E:\2019\gradle_lecture\ToDoApp>java -cp build/classes/main com.lec.gra.todo.ToDoApp
+ *
+ * 为了能够从jar文件启动应用，清单文件MANIFEST.MF需要包含信息头Main-Class
+ * E:\2019\gradle_lecture\ToDoApp\build\libs>java -jar ToDoApp-0.1.jar
+ *
+ * 改变默认结构--兼容历史遗留项目
+ *
+ * 配置和使用外部依赖
+ * 1.配置仓库
+ * 2.设置依赖
+ *
+ * Gradle如何支持web项目：war 和 jetty
+ * War插件扩展自Java插件，为Web应用部署和组装War包添加了约定与支持
+ * Jetty是一个流行的轻量级开源Web容器，Gradle的Jetty插件扩展了War插件，为部署一个Web应用到嵌入式容器和运行Web应用提供了对应的任务。
+ * Gradle使用Gretty插件支持Jetty容器：id "org.akhikhl.gretty" version "2.0.0"
+ *
+ * 启动项目：gradle appRun
+ *
+ * Gradle包装器--Gradle的核心特性，能够让机器在没有安装Gradle的情况下运行Gradle构建。
+ *  原理：通过自动从中央仓库下载Gradle运行时，解压和使用来实现。
+ *  两步配置包装器：添加包装器任务和执行任务
+ *      1.将包装器任务添加到构建脚本build.gradle
+             task wrapper(type: Wrapper) {
+                gradleVersion = '5.4.1'
+             }
+ *      2.通过执行包装器中的任务生成包装器文件
+            gradle wrapper
+ 
+    启动App:
+        Windows: gradlew.bat appRun
+        *nix: gradlew appRun
+ * 
+ *  当包装器任务被执行时，Gradle运行时会被下载、解包并使用
+ *  Gradle会被下载到$HOME/.gradle/wrapper/dists目录下；
+ *  Gradle包装器会负责解包该发布文件并设置相应的权限来执行批处理文件；
+ *  下载过程只需执行一次，后续构建运行会重用这个解包的运行时安装程序。
+ *  
+ */
+
+// legacy plugin application
+/*buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+    dependencies {
+        classpath "gradle.plugin.org.akhikhl.gretty:gretty:2.0.0"
+    }
+}*/
+
+plugins {
+    id 'java'
+    id 'war'
+//    id "org.gretty" version "2.3.1"
+    id "org.akhikhl.gretty" version "2.0.0"
+}
+
+// legacy plugin application
+/*apply plugin: "org.akhikhl.gretty"*/
+
+
+group 'com.lec.gradle'
+version = 0.1
+
+sourceCompatibility = 1.8
+
+//为了能够从jar文件启动应用，清单文件MANIFEST.MF需要包含信息头Main-Class
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.lec.gra.todo.ToDoApp'
+    }
+}
+
+//定义仓库：Gradle要求至少一个仓库
+repositories {
+    mavenCentral() //配置一个Maven中央仓库
+}
+
+
+/**
+ * 定义依赖
+ * https://docs.gradle.org/5.4.1/userguide/building_java_projects.html
+ *
+ * As far as configurations go, the main ones of interest are:
+ *  compileOnly — for dependencies that are necessary to compile your production code but shouldn’t be part of the runtime classpath
+ *  implementation (supersedes compile) — used for compilation and runtime
+ *  runtimeOnly (supersedes runtime) — only used at runtime, not for compilation
+ *  testCompileOnly — same as compileOnly except it’s for the tests
+ *  testImplementation — test equivalent of implementation
+ *  testRuntimeOnly — test equivalent of runtimeOnly
+ *
+ */
+dependencies {
+    //导入依赖
+    implementation(
+            'org.apache.commons:commons-lang3:3.9'
+    )
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
+
+    //导入Servlet依赖，providedCompile表示该依赖在编译时需要，运行时由环境(如Jetty)提供，该依赖不会打包到WAR中
+    compileOnly(
+            'javax.servlet:servlet-api:3.0-alpha-1',
+            'javax.servlet.jsp:jsp-api:2.1'
+    )
+    //导入JSTL依赖，runtime表示在编译时不需要，运行时需要，会成为WAR中的一部分
+    runtimeOnly 'javax.servlet:jstl:1.1.2', 'taglibs:standard:1.1.2'
+
+}
+
+//配置jetty属性
+gretty {
+    httpPort = 8088
+    contextPath = '/todoApp'
+//    servletContainer = 'jetty9'
+}
+
+//定义包装器任务
+task wrapper(type: Wrapper) {
+    gradleVersion = '5.4.1'
+}
+
+
+//工作目录设置,以下就是默认设置,一般项目中不需要额外配置
+/*sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+        resources {
+            srcDir 'src/main/resources'
+        }
+    }
+}*/
+
+//改变默认结构--兼容历史遗留项目
+/*
+sourceSets {
+    main {
+        java {
+            srcDir 'java'
+        }
+    }
+    test {
+        java {
+            srcDir 'test'
+        }
+    }
+}
+buildDir = 'out'*/
+
+//定制WAR插件
+/*webAppDirName = 'webfiles' //改变Web应用的源代码目录
+war {
+    from 'static'  //将css和jsp目录添加到WAR文件的根目录下
+}*/

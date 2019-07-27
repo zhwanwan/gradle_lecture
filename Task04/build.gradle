@@ -1,0 +1,238 @@
+/**
+ * project接口API
+ * build.gradle实例化org.gradle.api.Project，通过project变量隐式可用
+ */
+/*setDescription('Task04')
+println "Description of project ${name} : " + project.description*/
+
+/**
+ * task接口API
+ * org.gradle.api.Task
+ *
+ * 扩展属性--使用命名空间ext
+ *  只有在初始声明扩展属性时需要使用ext命名空间；
+ *  使用ext命名空间访问属性时可选的
+ * 额外的属性也可以通过属性文件来提供
+ *
+ * Gradle属性可以通过${HOME}/.gradle/gradle.properties文件获取，仅有一个，被所有gradle项目共享
+ */
+
+/*assert project.exampleProp == 'myValue'
+
+task printGradleProperty {
+    doLast {
+        println "Second Gradle Property [someOtherProp]: $someOtherProp"
+    }
+}
+
+project.ext.myProp = 'myValue'
+ext {
+    someOtherProp = 123
+}
+assert myProp == 'myValue'
+println project.someOtherProp*/
+
+
+/**
+ * 项目版本管理示例
+ *
+ * gradle tasks
+ */
+//version = '0.1-SNAPSHOT'
+/*task printVersion {
+    *//*doFirst {
+        println 'Before reading the project version'
+    }
+    doLast {
+        println "Version: ${version}"
+    }*//*
+    //setter方法设置属性group,description,gradle tasks运行可查看信息
+    group = 'versioning'
+    description = 'Print project version.'
+    logger.quiet("Version: ${version}")
+}*/
+//printVersion.doFirst { println 'First Action' }
+//printVersion.doLast { println 'Last Action' }
+
+/**
+ * 定义task依赖
+ *
+ * gradle tasks
+ */
+/*task first {
+    println 'first task'
+}
+task second {
+    println 'second task'
+}*/
+/*task printVersion(dependsOn: [first,second]) {
+    logger.quiet("Version: ${version}")
+}
+task third {
+    println 'third task'
+}
+third.dependsOn('printVersion')*/
+//first.finalizedBy second
+
+/**
+ * POGO
+ * */
+/*version = new ProjectVersion(0, 1, false)*/
+
+/*class ProjectVersion {
+    Integer major
+    Integer minor
+    Boolean release
+
+    ProjectVersion(Integer major, Integer minor) {
+        this.major = major
+        this.minor = minor
+        this.release = Boolean.FALSE
+    }
+
+    ProjectVersion(Integer major, Integer minor, Boolean release) {
+        this(major, minor)
+        this.release = release
+    }
+
+    @Override
+    String toString() {
+        "$major.$minor${release ? '' : '-SNAPSHOT'}"
+    }
+}*/
+
+/*task printVersion {
+    logger.quiet "Version: $version"
+}*/
+
+/**
+ * 增加版本文件version.properties
+ * 添加task配置块
+ */
+//ext.versionFile = file('version.properties')
+ext.versionFile = file('project-version.properties')
+
+task loadVersion {
+    project.version = readVersion()
+}
+
+ProjectVersion readVersion() {
+    logger.quiet 'Reading the version file.'
+    if (!versionFile.exists())
+        throw new GradleException("Required version file does not exist: $versionFile.canonicalPath")
+    Properties versionProps = new Properties()
+    versionFile.withInputStream { stream ->
+        versionProps.load(stream)
+    }
+    //在Groovy中，如果return是方法中最后一条语句的话，则return可以省略，通过构造方法赋值
+    /*new ProjectVersion(
+            versionProps.major.toInteger(),
+            versionProps.minor.toInteger(),
+            versionProps.release.toBoolean()
+    )*/
+
+    //新定义的ProjectVersion没有构造方法，需要通过setter设置属性值
+    new ProjectVersion(
+            min: versionProps.major.toInteger(),
+            maj: versionProps.minor.toInteger(),
+            prodReady: versionProps.release.toBoolean()
+    )
+}
+
+task printVersion {
+    logger.quiet("Version: $version")
+}
+
+/***
+ * Gradle构建生命周期
+ * task--inputs/outputs
+ */
+/*
+task makeReleaseVersion(group: 'versioning', description: 'Makes project a release version.') {
+    //修改版本release为turn
+    version.release = true
+    //同时通过Ant task的propertyfile方法用来修改属性文件
+    ant.propertyfile(file: versionFile) {
+        entry(key: 'release', type: 'string', operation: '=', value: 'true')
+    }
+}*/
+/*task makeReleaseVersion(group: 'versioning', description: 'Makes project a release version.') {
+    //声明版本的release属性作为输入
+    inputs.property('release', version.release)
+    //由于版本文件被修改了，所以它被声明为输出文件属性
+    outputs.file versionFile
+    doLast {
+        //修改版本release为ture
+        version.release = true
+        //同时通过Ant task的propertyfile方法用来修改属性文件
+        ant.propertyfile(file: versionFile) {
+            entry(key: 'release', type: 'string', operation: '=', value: 'true')
+        }
+    }
+}*/
+
+/**
+ * 编写自定义的Task类
+ */
+class ReleaseVersionTask extends DefaultTask {
+
+    //通过注解声明task的input/output
+    @Input
+    //验证属性，如果为空则抛出异常
+    @Optional
+    //允许为空
+    Boolean release
+    @OutputFile
+    File destFile
+
+    ReleaseVersionTask() {
+        group = 'versioning'
+        description = 'Makes project a release version.'
+    }
+
+    //使用注解声明将被执行的方法
+    @TaskAction
+    void start() {
+        //project.version.release = true
+        project.version.prodReady = true
+        ant.propertyfile(file: destFile) {
+            entry(key: 'release', type: 'string', operation: '=', value: 'true')
+        }
+    }
+}
+
+/**
+ * 使用自定义的Task
+ * 定义一个增强的ReleaseVersionTask类型的task
+ */
+/*task makeReleaseVersion(type: ReleaseVersionTask) {
+    release = version.release
+    destFile = versionFile
+}*/
+
+/**
+ * 应用自定义task的可重用性
+ * 在同一个配置中，先注释上面的ProjectVersion类
+ *
+ * 重定义makeReleaseVersion任务
+ */
+class ProjectVersion {
+
+    Integer min
+    Integer maj
+    Boolean prodReady
+
+    @Override
+    String toString() {
+        "$maj.$min${prodReady ? '' : '-SNAPSHOT'}"
+    }
+}
+
+task makeReleaseVersion(type: ReleaseVersionTask) {
+    release = version.prodReady
+    destFile = new File('project-version.properties') //new File可直接用file代替
+}
+
+/**
+ * Gradle内置的task类型
+ */
