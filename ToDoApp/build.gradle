@@ -22,21 +22,18 @@
  *  原理：通过自动从中央仓库下载Gradle运行时，解压和使用来实现。
  *  两步配置包装器：添加包装器任务和执行任务
  *      1.将包装器任务添加到构建脚本build.gradle
-             task wrapper(type: Wrapper) {
-                gradleVersion = '5.4.1'
-             }
- *      2.通过执行包装器中的任务生成包装器文件
-            gradle wrapper
- 
-    启动App:
-        Windows: gradlew.bat appRun
-        *nix: gradlew appRun
- * 
+ task wrapper(type: Wrapper) {gradleVersion = '5.4.1'}*      2.通过执行包装器中的任务生成包装器文件
+ gradle wrapper
+
+ 启动App:
+ Windows: gradlew.bat appRun
+ * nix: gradlew appRun
+ *
  *  当包装器任务被执行时，Gradle运行时会被下载、解包并使用
  *  Gradle会被下载到$HOME/.gradle/wrapper/dists目录下；
  *  Gradle包装器会负责解包该发布文件并设置相应的权限来执行批处理文件；
  *  下载过程只需执行一次，后续构建运行会重用这个解包的运行时安装程序。
- *  
+ *
  */
 
 // legacy plugin application
@@ -155,4 +152,81 @@ buildDir = 'out'*/
 /*webAppDirName = 'webfiles' //改变Web应用的源代码目录
 war {
     from 'static'  //将css和jsp目录添加到WAR文件的根目录下
+}*/
+
+/**
+ * --------------------------------------------------------------------
+ * 定义Task用于指定版本，打包，备份
+ * */
+/*
+ext.versionFile = file('version.properties')
+
+task loadVersion {
+    project.version = readVersion()
+}
+
+ProjectVersion readVersion() {
+    logger.quiet 'Reading the version file.'
+
+    if (!versionFile.exists()) {
+        throw new GradleException("Required version file does not exit: $versionFile.canonicalPath")
+    }
+
+    Properties versionProps = new Properties()
+
+    versionFile.withInputStream { stream ->
+        versionProps.load(stream)
+    }
+
+    new ProjectVersion(versionProps.major.toInteger(), versionProps.minor.toInteger(), versionProps.release.toBoolean())
+}
+
+task makeReleaseVersion(group: 'versioning', description: 'Makes project a release version.') {
+    version.release = true
+    ant.propertyfile(file: versionFile) {
+        entry(key: 'release', type: 'string', operation: '=', value: 'true')
+    }
+}
+
+task createDistribution(type: Zip, dependsOn: makeReleaseVersion) {
+    from war.outputs.files
+
+    from(sourceSets*.allSource) {
+        into 'src'
+    }
+
+    from(rootDir) {
+        include versionFile.name
+    }
+}
+
+task backupReleaseDistribution(type: Copy) {
+    from createDistribution.outputs.files
+    into "$buildDir/backup"
+}
+
+task release(dependsOn: backupReleaseDistribution) {
+    logger.quiet 'Releasing the project...'
+}
+
+class ProjectVersion {
+    Integer major
+    Integer minor
+    Boolean release
+
+    ProjectVersion(Integer major, Integer minor) {
+        this.major = major
+        this.minor = minor
+        this.release = Boolean.FALSE
+    }
+
+    ProjectVersion(Integer major, Integer minor, Boolean release) {
+        this(major, minor)
+        this.release = release
+    }
+
+    @Override
+    String toString() {
+        "$major.$minor${release ? '' : '-SNAPSHOT'}"
+    }
 }*/

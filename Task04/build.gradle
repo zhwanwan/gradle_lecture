@@ -79,7 +79,7 @@ third.dependsOn('printVersion')*/
  * */
 /*version = new ProjectVersion(0, 1, false)*/
 
-/*class ProjectVersion {
+class ProjectVersion {
     Integer major
     Integer minor
     Boolean release
@@ -99,7 +99,7 @@ third.dependsOn('printVersion')*/
     String toString() {
         "$major.$minor${release ? '' : '-SNAPSHOT'}"
     }
-}*/
+}
 
 /*task printVersion {
     logger.quiet "Version: $version"
@@ -109,8 +109,8 @@ third.dependsOn('printVersion')*/
  * 增加版本文件version.properties
  * 添加task配置块
  */
-//ext.versionFile = file('version.properties')
-ext.versionFile = file('project-version.properties')
+ext.versionFile = file('version.properties')
+//ext.versionFile = file('project-version.properties')
 
 task loadVersion {
     project.version = readVersion()
@@ -125,18 +125,18 @@ ProjectVersion readVersion() {
         versionProps.load(stream)
     }
     //在Groovy中，如果return是方法中最后一条语句的话，则return可以省略，通过构造方法赋值
-    /*new ProjectVersion(
+    new ProjectVersion(
             versionProps.major.toInteger(),
             versionProps.minor.toInteger(),
             versionProps.release.toBoolean()
-    )*/
+    )
 
     //新定义的ProjectVersion没有构造方法，需要通过setter设置属性值
-    new ProjectVersion(
+    /*new ProjectVersion(
             min: versionProps.major.toInteger(),
             maj: versionProps.minor.toInteger(),
             prodReady: versionProps.release.toBoolean()
-    )
+    )*/
 }
 
 task printVersion {
@@ -172,7 +172,7 @@ task makeReleaseVersion(group: 'versioning', description: 'Makes project a relea
 }*/
 
 /**
- * 编写自定义的Task类
+ * 编写自定义的Task类--移到buildSrc中
  */
 class ReleaseVersionTask extends DefaultTask {
 
@@ -216,6 +216,7 @@ class ReleaseVersionTask extends DefaultTask {
  *
  * 重定义makeReleaseVersion任务
  */
+/*
 class ProjectVersion {
 
     Integer min
@@ -227,12 +228,149 @@ class ProjectVersion {
         "$maj.$min${prodReady ? '' : '-SNAPSHOT'}"
     }
 }
+*/
 
-task makeReleaseVersion(type: ReleaseVersionTask) {
+/*task makeReleaseVersion(type: ReleaseVersionTask) {
     release = version.prodReady
     destFile = new File('project-version.properties') //new File可直接用file代替
-}
+}*/
+
 
 /**
  * Gradle内置的task类型
+ * Zip
+ * Copy
+ * 使用task类型备份ZIP发布包
+ *
+ * task之间的依赖关系通过dependsOn方法显示声明的
+ * 另外，Gradle可以通过使用一个task的输出作为另一个task的输入来推断依赖关系
  */
+
+apply plugin: 'war'
+
+task makeReleaseVersion(group: 'versioning', description: 'Makes project a release version.') {
+    version.release = true
+    ant.propertyfile(file: versionFile) {
+        entry(key: 'release', type: 'string', operation: '=', value: 'true')
+    }
+}
+
+task createDistribution(type: Zip, dependsOn: makeReleaseVersion) {
+    //隐式引用War task的输出
+    from war.outputs.files
+    //把所有源文件都放到ZIP文件的src目录下
+    from(sourceSets*.allSource) {
+        into 'src'
+    }
+    from(rootDir) {
+        //添加版本文件
+        include versionFile.name
+    }
+}
+
+
+task backupReleaseDistribution(type: Copy) {
+    from createDistribution.outputs.files
+    into "$buildDir/backup"
+}
+
+task release(dependsOn: backupReleaseDistribution) {
+    logger.quiet 'Releasing the project...'
+}
+
+/**
+ * Task规则
+ * 增加主版本task
+ * 增加此版本task
+ */
+task incrementMajorVersion(group: 'versioning', description: 'Increments project major version.') {
+    String currentVersion = version.toString()
+    ++version.major
+    String newVersion = version.toString()
+    logger.info "Incrementing major project version: $currentVersion -> $newVersion"
+    //使用Ant task的propertyfile增加属性文件中的major属性
+    ant.propertyfile(file: versionFile) {
+        entry(key: 'major', type: 'int', operation: '+', value: 1)
+    }
+}
+
+task incrementMinorVersion(group: 'versioning', description: 'Increments project minor version.') {
+    String currentVersion = version.toString()
+    ++version.minor
+    String newVersion = version.toString()
+    logger.info "Incrementing minor project version: $currentVersion -> $newVersion"
+    ant.propertyfile(file: versionFile) {
+        entry(key: 'minor', type: 'int', operation: '+', value: 1)
+    }
+}
+
+/***
+ * task规则命名模式
+ * task规则只能通过task容器来添加
+ *
+ * 以下是添加带有描述信息的task规则
+ */
+tasks.addRule("Pattern: increment<Classifier>Version – Increments the project version classifier.") { String taskName ->
+    if (taskName.startsWith('increment') && taskName.endsWith('Version')) {
+        task(taskName) {
+            String classifier = (taskName - 'increment' - 'Version').toLowerCase()
+            String currentVersion = version.toString()
+            switch (classifier) {
+                case 'major':
+                    ++version.major
+                    break
+                case 'minor':
+                    ++version.minor
+                    break
+                default:
+                    throw new GradleException("Invalid version type '$classifier. Allowed types: ['Major', 'Minor']")
+            }
+            String newVersion = version.toString()
+            logger.info "Incrementing $classifier project version: $currentVersion -> $newVersion"
+            ant.propertyfile(file: versionFile) {
+                entry(key: classifier, type: 'int', operation: '+', value: 1)
+            }
+        }
+    }
+
+}
+
+/**
+ * 构建生命周期hook
+ *
+ * makeReleaseVersion-->war-->createDistribution-->backupReleaseVersion-->release
+ *
+ * 通过生命周期hook实现发布版本功能
+ *
+ * */
+/*gradle.taskGraph.whenReady { TaskExecutionGraph taskGraph ->
+    if (taskGraph.hasTask(release)) {
+        if (!version.release) {
+            version.release = true
+            ant.propertyfile(file: versionFile) {
+                entry(key: 'release', type: 'string', operation: '=', value: 'true')
+            }
+        }
+    }
+}*/
+
+//另外通过实现接口完成相同的功能
+class ReleaseVersionListener implements TaskExecutionGraphListener {
+    final static String releaseTaskPath = ':release'
+
+    @Override
+    void graphPopulated(TaskExecutionGraph taskGraph) {
+        if (taskGraph.hasTask(releaseTaskPath)) {
+            List<Task> allTasks = taskGraph.allTasks
+            Task releaseTask = allTasks.find { it.path == releaseTaskPath }
+            Project project = releaseTask.project
+            if (!project.version.release) {
+                project.version.release = true
+                project.ant.propertyfile(file: project.versionFile) {
+                    entry(key: 'release', type: 'string', operation: '=', value: 'true')
+                }
+            }
+        }
+    }
+}
+gradle.taskGraph.addTaskExecutionGraphListener(new ReleaseVersionListener())
